@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#111418">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Veazy Control</title>
+<style>
+  :root {
+    --bg: #111418; --card: #1b2027; --line: #2a313b; --text: #e8ecf1;
+    --muted: #8b95a3; --accent: #ff8a3d; --ok: #4cc38a; --bad: #ef5b5b;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  body { padding: 16px 16px calc(24px + env(safe-area-inset-bottom)); max-width: 480px; margin: 0 auto; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+  h1 { font-size: 20px; margin: 0; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--bad); }
+  .dot.on { background: var(--ok); }
+  .dot.busy { background: var(--accent); }
+  button { font: inherit; color: var(--text); background: #262d37; border: 1px solid var(--line);
+    border-radius: 12px; padding: 12px 14px; cursor: pointer; }
+  button:active { transform: scale(.97); }
+  button:disabled { opacity: .4; cursor: default; }
+  button.primary { background: var(--accent); color: #1a1006; border-color: var(--accent); font-weight: 600; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 16px; margin-bottom: 12px; }
+  .card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 12px; font-weight: 600; }
+  .big { text-align: center; }
+  .temp { font-size: 64px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+  .temp small { font-size: 28px; color: var(--muted); font-weight: 500; }
+  .sub { color: var(--muted); margin-top: 6px; font-size: 14px; }
+  .state { margin-top: 8px; font-weight: 600; }
+  .state.hot { color: var(--accent); } .state.ready { color: var(--ok); }
+  .row { display: flex; gap: 8px; }
+  .row > * { flex: 1; }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; text-align: center; margin-top: 14px; }
+  .stats div { background: #151a20; border-radius: 10px; padding: 8px 4px; }
+  .stats b { display: block; font-size: 17px; font-variant-numeric: tabular-nums; }
+  .stats span { font-size: 12px; color: var(--muted); }
+  input[type=range] { width: 100%; height: 34px; accent-color: var(--accent); margin: 8px 0; }
+  .lbl { display: flex; justify-content: space-between; font-size: 14px; }
+  .lbl span:last-child { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .modes button.active { background: var(--accent); color: #1a1006; border-color: var(--accent); font-weight: 600; }
+  .switchrow { display: flex; align-items: center; justify-content: space-between; padding: 6px 0; }
+  .toggle { position: relative; width: 50px; height: 30px; flex: none; }
+  .toggle input { opacity: 0; width: 100%; height: 100%; position: absolute; margin: 0; z-index: 2; }
+  .toggle i { position: absolute; inset: 0; background: #39414d; border-radius: 30px; transition: .15s; }
+  .toggle i::after { content: ""; position: absolute; width: 24px; height: 24px; left: 3px; top: 3px; border-radius: 50%; background: #fff; transition: .15s; }
+  .toggle input:checked + i { background: var(--accent); }
+  .toggle input:checked + i::after { transform: translateX(20px); }
+  #msg { min-height: 20px; font-size: 14px; color: var(--bad); margin: 0 0 10px; }
+  .note { color: var(--muted); font-size: 12px; margin-top: 12px; }
+  .off { opacity: .45; pointer-events: none; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Veazy Control</h1>
+    <div class="pill"><span class="dot" id="dot"></span><span id="status">Not connected</span></div>
+  </div>
+  <button class="primary" id="connectBtn">Connect</button>
+</header>
+<p id="msg"></p>
+
+<div id="panel" class="off">
+  <div class="card big">
+    <div class="temp"><span id="tgt">--</span><small>°C</small></div>
+    <div class="sub">target temperature</div>
+    <div class="state" id="heatState">Heater off</div>
+    <div class="stats">
+      <div><b id="cur">--</b><span>current °C</span></div>
+      <div><b id="bat">--</b><span>battery</span></div>
+      <div><b id="auto">--</b><span>auto-off</span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Temperature</h2>
+    <input type="range" id="tempSlider" min="40" max="210" step="1" value="180">
+    <div class="row">
+      <button data-step="-5">−5</button>
+      <button data-step="-1">−1</button>
+      <button data-step="1">+1</button>
+      <button data-step="5">+5</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Heater</h2>
+    <div class="row modes" id="modes">
+      <button data-mode="0">Off</button>
+      <button data-mode="1">On</button>
+      <button data-mode="2">Boost</button>
+      <button data-mode="3">Super</button>
+    </div>
+    <div class="note">Only heat while you're with the device.</div>
+  </div>
+
+  <div class="card">
+    <h2>Boost offsets</h2>
+    <div class="lbl"><span>Boost</span><span id="boostLbl">+0 °C</span></div>
+    <input type="range" id="boostSlider" min="0" max="50" step="1" value="0">
+    <div class="lbl"><span>Superboost (on top of boost)</span><span id="superLbl">+0 °C</span></div>
+    <input type="range" id="superSlider" min="0" max="50" step="1" value="0">
+  </div>
+
+  <div class="card">
+    <h2>Device settings</h2>
+    <div class="lbl"><span>LED brightness</span><span id="brLbl">--</span></div>
+    <input type="range" id="brSlider" min="1" max="9" step="1" value="5">
+    <div class="switchrow"><span>Vibration</span>
+      <label class="toggle"><input type="checkbox" id="vibToggle"><i></i></label></div>
+    <div class="switchrow"><span>Show °F on the device</span>
+      <label class="toggle"><input type="checkbox" id="fToggle"><i></i></label></div>
+    <div class="row" style="margin-top:10px"><button id="locateBtn">Find my device (vibrate)</button></div>
+    <div class="note" id="info"></div>
+  </div>
+</div>
+
+<div class="note">Unofficial. Not affiliated with Storz &amp; Bickel. Works offline; only talks to your device over Bluetooth.
+  Close the official app/web app first, the device only accepts one connection.</div>
+
+<script>
+(() => {
+  'use strict';
+  const SERVICE = '00000000-5354-4f52-5a26-4249434b454c';
+  const CHAR    = '00000001-5354-4f52-5a26-4249434b454c';
+  const MODES = ['Heater off', 'Heater on', 'Boost', 'Superboost'];
+  const $ = id => document.getElementById(id);
+
+  let device = null, ch = null, pollTimer = null, lastRx = 0, pending = 0;
+  let chain = Promise.resolve();
+  const S = { target: null, cur: null, boost: 0, sboost: 0, bat: null, auto: null,
+              mode: 0, charging: false, f: false, reached: false, bright: null, vib: null, fw: '' };
+  const lock = { target: 0, boost: 0, sboost: 0, bright: 0 };
+  const locked = k => Date.now() < lock[k];
+  const hold = k => { lock[k] = Date.now() + 2000; };
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+  function msg(t) { $('msg').textContent = t || ''; }
+  function setStatus(text, cls) {
+    $('status').textContent = text;
+    $('dot').className = 'dot' + (cls ? ' ' + cls : '');
+  }
+
+  // ---- Bluetooth I/O (one GATT operation at a time) ----
+  function enqueue(fn) {
+    const p = chain.then(fn);
+    chain = p.catch(() => {});
+    return p;
+  }
+  function send(bytes, len = 20) {
+    const buf = new Uint8Array(len);
+    buf.set(bytes);
+    pending++;
+    return enqueue(() => ch.writeValue(buf))
+      .catch(e => { msg('Write failed: ' + (e && e.message || e)); throw e; })
+      .finally(() => { pending--; });
+  }
+  const req = cmd => send([cmd]);
+  const reqSettings = () => send([0x06], 7);
+
+  function packet(mask, fill) {
+    const p = new Uint8Array(20);
+    p[0] = 0x01; p[1] = mask;
+    fill(p);
+    return p;
+  }
+  const setTarget = c => { const v = Math.round(c * 10);
+    return send(packet(0x02, p => { p[4] = v & 255; p[5] = (v >> 8) & 255; })); };
+  const setBoost  = c => send(packet(0x04, p => { p[6] = c; }));
+  const setSuper  = c => send(packet(0x08, p => { p[7] = c; }));
+  const setMode   = m => send(packet(0x20, p => { p[11] = m; }));
+  const setUnitF  = on => send(packet(0x80, p => { p[14] = on ? 1 : 0; p[15] = 1; }));
+  const setBright = n => send([0x06, 0x01, n], 7);
+  const setVib    = on => send([0x06, 0x08, 0, 0, on ? 1 : 0], 7);
+  const locate    = () => send([0x0D, 0x01]);
+
+  // ---- Parsing ----
+  function ascii(b, from, to) {
+    let s = '';
+    for (let i = from; i <= to && i < b.length; i++) if (b[i] >= 32 && b[i] < 127) s += String.fromCharCode(b[i]);
+    return s;
+  }
+  function onNotify(e) {
+    const v = e.target.value;
+    const b = new Uint8Array(v.buffer, v.byteOffset, v.byteLength);
+    lastRx = Date.now();
+    const u16 = i => b[i] | (b[i + 1] << 8);
+    switch (b[0]) {
+      case 0x01:
+        S.cur = u16(2) === 0x8000 ? null : u16(2) / 10;
+        S.target = u16(4) / 10;
+        S.boost = b[6]; S.sboost = b[7];
+        S.bat = b[8];
+        S.auto = u16(9);
+        S.mode = b[11];
+        S.charging = b[13] !== 0;
+        S.f = !!(b[14] & 1);
+        S.reached = !!(b[14] & 2);
+        break;
+      case 0x02: S.fw = ascii(b, 2, 7); break;
+      case 0x06: S.bright = b[2]; S.vib = b[5] !== 0; break;
+      default: return;
+    }
+    render();
+  }
+
+  // ---- UI ----
+  function render() {
+    if (S.target != null && !locked('target')) {
+      $('tempSlider').value = clamp(Math.round(S.target), 40, 210);
+    }
+    $('tgt').textContent = S.target == null ? '--' : (locked('target') ? $('tempSlider').value : S.target.toFixed(S.target % 1 ? 1 : 0));
+    $('cur').textContent = S.cur == null ? '--' : S.cur.toFixed(0);
+    $('bat').textContent = S.bat == null ? '--' : S.bat + '%' + (S.charging ? '⚡' : '');
+    $('auto').textContent = (S.mode && S.auto != null) ? Math.floor(S.auto / 60) + ':' + String(S.auto % 60).padStart(2, '0') : '--';
+
+    const st = $('heatState');
+    if (!S.mode) { st.textContent = 'Heater off'; st.className = 'state'; }
+    else if (S.reached) { st.textContent = MODES[S.mode] + ' · ready'; st.className = 'state ready'; }
+    else { st.textContent = MODES[S.mode] + ' · heating…'; st.className = 'state hot'; }
+
+    document.querySelectorAll('#modes button').forEach(btn =>
+      btn.classList.toggle('active', Number(btn.dataset.mode) === S.mode));
+
+    if (!locked('boost'))  $('boostSlider').value = S.boost;
+    if (!locked('sboost')) $('superSlider').value = S.sboost;
+    $('boostLbl').textContent = '+' + $('boostSlider').value + ' °C';
+    $('superLbl').textContent = '+' + $('superSlider').value + ' °C';
+
+    if (S.bright != null && !locked('bright')) $('brSlider').value = clamp(S.bright, 1, 9);
+    $('brLbl').textContent = $('brSlider').value + ' / 9';
+    if (S.vib != null) $('vibToggle').checked = S.vib;
+    $('fToggle').checked = S.f;
+    $('info').textContent = [device && device.name, S.fw && ('fw ' + S.fw)].filter(Boolean).join(' · ');
+  }
+
+  let tempTimer = null;
+  function userTemp(v) {
+    v = clamp(Math.round(v), 40, 210);
+    $('tempSlider').value = v;
+    hold('target');
+    $('tgt').textContent = v;
+    clearTimeout(tempTimer);
+    tempTimer = setTimeout(() => { setTarget(v).catch(() => {}); }, 300);
+  }
+  $('tempSlider').addEventListener('input', e => userTemp(+e.target.value));
+  document.querySelectorAll('[data-step]').forEach(b =>
+    b.addEventListener('click', () => userTemp(+$('tempSlider').value + +b.dataset.step)));
+
+  document.querySelectorAll('#modes button').forEach(b =>
+    b.addEventListener('click', () => setMode(+b.dataset.mode).catch(() => {})));
+
+  function debounced(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
+  const sendBoost = debounced(v => setBoost(v).catch(() => {}), 300);
+  const sendSuper = debounced(v => setSuper(v).catch(() => {}), 300);
+  const sendBright = debounced(v => setBright(v).then(reqSettings).catch(() => {}), 300);
+
+  $('boostSlider').addEventListener('input', e => { hold('boost'); $('boostLbl').textContent = '+' + e.target.value + ' °C'; sendBoost(+e.target.value); });
+  $('superSlider').addEventListener('input', e => { hold('sboost'); $('superLbl').textContent = '+' + e.target.value + ' °C'; sendSuper(+e.target.value); });
+  $('brSlider').addEventListener('input', e => { hold('bright'); $('brLbl').textContent = e.target.value + ' / 9'; sendBright(+e.target.value); });
+  $('vibToggle').addEventListener('change', e => { setVib(e.target.checked).then(reqSettings).catch(() => {}); });
+  $('fToggle').addEventListener('change', e => { setUnitF(e.target.checked).catch(() => {}); });
+  $('locateBtn').addEventListener('click', () => locate().catch(() => {}));
+
+  // ---- Connection ----
+  async function open() {
+    setStatus('Connecting…', 'busy');
+    msg('');
+    const server = await device.gatt.connect();
+    const svc = await server.getPrimaryService(SERVICE);
+    ch = await svc.getCharacteristic(CHAR);
+    ch.addEventListener('characteristicvaluechanged', onNotify);
+    await ch.startNotifications();
+    lastRx = Date.now();
+    chain = Promise.resolve(); pending = 0;
+    await req(0x01);
+    await req(0x02);
+    await reqSettings();
+    setStatus('Connected', 'on');
+    $('panel').classList.remove('off');
+    $('connectBtn').textContent = 'Disconnect';
+    clearInterval(pollTimer);
+    pollTimer = setInterval(() => {
+      if (Date.now() - lastRx > 5000) { lost('Connection lost'); return; }
+      if (pending < 2) req(0x01).catch(() => {});
+    }, 500);
+  }
+
+  function lost(text) {
+    clearInterval(pollTimer);
+    $('panel').classList.add('off');
+    setStatus(text || 'Disconnected');
+    $('connectBtn').textContent = device ? 'Reconnect' : 'Connect';
+    try { if (device && device.gatt.connected) device.gatt.disconnect(); } catch (_) {}
+  }
+
+  async function onConnectClick() {
+    if (!navigator.bluetooth) {
+      msg('Web Bluetooth isn\'t available here. Use Chrome on Android and open this page over HTTPS or from a local file.');
+      return;
+    }
+    try {
+      if (device && device.gatt.connected) { device.gatt.disconnect(); return; }
+      if (!device) {
+        device = await navigator.bluetooth.requestDevice({ acceptAllDevices: true, optionalServices: [SERVICE] });
+        device.addEventListener('gattserverdisconnected', () => lost('Disconnected'));
+      }
+      await open();
+    } catch (e) {
+      if (e && e.name === 'NotFoundError') { setStatus('Not connected'); return; }
+      msg((e && e.message) || String(e));
+      lost('Not connected');
+    }
+  }
+  $('connectBtn').addEventListener('click', onConnectClick);
+  render();
+})();
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); });
+}
+</script>
+</body>
+</html>
